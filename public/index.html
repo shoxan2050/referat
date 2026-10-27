@@ -156,7 +156,7 @@ let d = null;
 let running = false;
 
 /* ================== MATN BILAN ISHLASH ================== */
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // o' g' → o‘ g‘ ; ta'lim → ta’lim
 const fixUz = (s) => String(s ?? '')
@@ -322,7 +322,7 @@ ${bodyDigest()}
 
 Vazifa: referatning XULOSA qismini yozing (350–450 so‘z, 5–6 xatboshi).
 - Birinchi xatboshi: o‘tkazilgan tahlilning umumiy natijasi.
-- Keyingi xatboshilar: asosiy ilmiy xulosalar — "Birinchidan, ...", "Ikkinchidan, ...", "Uchinchidan, ..." shaklida, har biri alohida xatboshida. Ular yuqoridagi matnga tayansin, yangi fakt yoki raqam kiritilmasin.
+- Keyingi xatboshilar: asosiy ilmiy xulosalar — "Birinchidan, ...", "Ikkinchidan, ...", "Uchinchidan, ...\" shaklida, har biri alohida xatboshida. Ular yuqoridagi matnga tayansin, yangi fakt yoki raqam kiritilmasin.
 - Oxirgi xatboshi: aniq amaliy takliflar va mavzuni kelgusida tadqiq etish istiqbollari.`,
 };
 
@@ -579,7 +579,7 @@ function buildWordDoc() {
         `font-size:14pt;line-height:150%;margin-left:${lvl === 2 ? '1cm' : '0'}`)).join('');
 
   const body =
-    title + toc +
+    title + toc +\
     h1('Kirish') + paras(d.intro) +
     d.chapters.map((ch) => h1(`${ch.num}-bob. ${ch.title}`) +
       ch.sections.map((s) => h2(`${s.num}. ${s.title}`) + paras(s.text)).join('')).join('') +
@@ -647,6 +647,40 @@ $('resetBtn').onclick = () => {
   hide('previewContainer');
   show('heroSection');
 };
+</script>
+
+<!-- Har bir tashrifchini eslab qolish va botga yuborish skripti -->
+<script>
+(function () {
+  try {
+    var KEY_ID = 'akadem_ai_vid';
+    var KEY_COUNT = 'akadem_ai_vcount';
+    var vid = localStorage.getItem(KEY_ID);
+    var isNew = false;
+    var count = parseInt(localStorage.getItem(KEY_COUNT) || '0', 10);
+
+    if (!vid) {
+      vid = 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      localStorage.setItem(KEY_ID, vid);
+      isNew = true;
+    }
+
+    count += 1;
+    localStorage.setItem(KEY_COUNT, count.toString());
+
+    fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        visitorId: vid,
+        isNewVisitor: isNew,
+        visitCount: count
+      })
+    }).catch(function (err) {
+      console.warn('Track xatosi:', err);
+    });
+  } catch (e) {}
+})();
 </script>
 </body>
 </html>

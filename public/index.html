@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AkademAI — AI Referat Generatori</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .inp { width:100%; background:#18181b; border:1px solid #27272a; border-radius:.5rem; padding:.6rem .85rem; color:#fff; outline:none; }
+    .inp:focus { border-color:#52525b; }
+    .lbl { display:block; font-size:.75rem; color:#a1a1aa; margin-bottom:.25rem; font-weight:500; }
+
+    /* A4 varaq: TNR 14pt, 1.5 interval, hoshiyalar: chap 3, o‘ng 1.5, tepa/past 2 sm */
+    .a4-page {
+      width:210mm; min-height:297mm; box-sizing:border-box;
+      padding:20mm 15mm 20mm 30mm; margin:25px auto;
+      background:#fff; color:#000; box-shadow:0 12px 35px -5px rgba(0,0,0,.5);
+      font-family:'Times New Roman', Times, serif; font-size:14pt; line-height:1.5;
+    }
+    .a4-page h1 { font-size:14pt; font-weight:700; text-align:center; text-transform:uppercase; margin:0 0 12pt; break-after:avoid; }
+    .a4-page h2 { font-size:14pt; font-weight:700; text-align:center; margin:12pt 0 6pt; break-after:avoid; }
+    .a4-page p.t { text-align:justify; text-indent:1.25cm; margin:0; }
+    .a4-page p.ref { text-align:justify; padding-left:.75cm; text-indent:-.75cm; margin:0; }
+    .a4-page p.toc2 { padding-left:1cm; }
+    .title-page { display:flex; flex-direction:column; justify-content:space-between; text-align:center; }
+
+    /* Chop etish / PDF: har varaqda hoshiya va pastda sahifa raqami (titulda yo‘q) */
+    @page {
+      size:A4; margin:20mm 15mm 20mm 30mm;
+      @bottom-center { content:counter(page); font-family:'Times New Roman', serif; font-size:12pt; }
+    }
+    @page :first { @bottom-center { content:none; } }
+    @media print {
+      body { background:#fff !important; }
+      .no-print { display:none !important; }
+      #previewContainer { padding:0 !important; }
+      .a4-page { width:auto; min-height:0; padding:0; margin:0; box-shadow:none; break-after:page; }
+      .a4-page:last-child { break-after:auto; }
+      .title-page { min-height:255mm; }
+    }
+  </style>
+</head>
+<body class="bg-[#09090b] text-zinc-100 min-h-screen antialiased flex flex-col">
+
+  <header class="no-print border-b border-zinc-800/80 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-3.5 h-3.5 bg-white rounded-full"></div>
+      <span class="text-sm font-semibold tracking-wider uppercase text-zinc-200">AkademAI</span>
+    </div>
+    <div class="hidden sm:block text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">
+      TNR 14pt · 1.5 interval · 1.25 sm abzats · Chap 3 / O‘ng 1.5 / Tepa-past 2 sm
+    </div>
+  </header>
+
+  <!-- 1. ASOSIY SAHIFA -->
+  <main id="heroSection" class="no-print flex-1 flex flex-col items-center justify-center px-4 py-16 text-center">
+    <div class="max-w-2xl w-full space-y-8">
+      <div class="space-y-3">
+        <h1 class="text-4xl sm:text-6xl font-bold tracking-tight text-white">Haqiqiy AI bilan <br><span class="text-zinc-500">ilmiy referat yarating.</span></h1>
+        <p class="text-zinc-400 text-sm sm:text-base max-w-lg mx-auto">Mavzuni kiriting. AI reja tuzadi, har bir paragrafni alohida yozadi va hujjatni akademik talablar bo‘yicha formatlaydi.</p>
+      </div>
+      <form id="topicForm" class="relative max-w-xl mx-auto">
+        <input id="topicInput" type="text" required maxlength="200" placeholder="Referat mavzusini kiriting..."
+          class="w-full pl-5 pr-32 py-4 bg-zinc-900/90 border border-zinc-800 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 text-base">
+        <button type="submit" class="absolute right-2.5 top-2.5 bottom-2.5 px-5 bg-white text-black font-semibold text-sm rounded-xl hover:bg-zinc-200 transition">Boshlash ↵</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- 2. TITUL MA'LUMOTLARI -->
+  <div id="infoModal" class="no-print fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#121214] border border-zinc-800 w-full max-w-lg rounded-2xl p-6 sm:p-8 space-y-5 shadow-2xl max-h-[95vh] overflow-y-auto">
+      <div>
+        <h3 class="text-lg font-semibold text-white">Titul ma’lumotlari</h3>
+        <p class="text-xs text-zinc-400 mt-1">Muqova sahifasi uchun rekvizitlar</p>
+      </div>
+      <div class="space-y-3 text-sm">
+        <label class="block"><span class="lbl">Vazirlik</span>
+          <input id="ministry" class="inp" value="O‘zbekiston Respublikasi Oliy ta’lim, fan va innovatsiyalar vazirligi"></label>
+        <label class="block"><span class="lbl">OTM nomi</span>
+          <input id="university" class="inp" value="O‘zbekiston Milliy universiteti"></label>
+        <label class="block"><span class="lbl">Fakultet va kafedra</span>
+          <input id="department" class="inp" value="Iqtisodiyot fakulteti, Moliya kafedrasi"></label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="block"><span class="lbl">Talaba F.I.Sh.</span><input id="studentName" class="inp" value="Karimov Jasur"></label>
+          <label class="block"><span class="lbl">Qabul qildi</span><input id="supervisorName" class="inp" value="dots. Aliyev S.R."></label>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="block"><span class="lbl">Shahar</span><input id="city" class="inp" value="Toshkent"></label>
+          <label class="block"><span class="lbl">Yil</span><input id="year" class="inp" value="2026"></label>
+          <label class="block"><span class="lbl">Hajmi</span>
+            <select id="length" class="inp">
+              <option value="short">Qisqa (~12 bet)</option>
+              <option value="standard" selected>Standart (~16 bet)</option>
+              <option value="long">Katta (~22 bet)</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 pt-1">
+        <button id="cancelModalBtn" class="px-4 py-2.5 text-sm text-zinc-400 hover:text-white">Bekor qilish</button>
+        <button id="startGenBtn" class="px-5 py-2.5 bg-white text-black font-semibold text-sm rounded-xl hover:bg-zinc-200">AI bilan yozishni boshlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. GENERATSIYA JARAYONI -->
+  <div id="progressModal" class="no-print fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-[#111113] border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4">
+      <div class="flex items-center gap-2 border-b border-zinc-800 pb-4">
+        <div class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></div>
+        <span class="text-sm font-medium text-white">Referat yozilmoqda</span>
+      </div>
+      <div id="stepList" class="space-y-2 font-mono text-xs max-h-64 overflow-y-auto"></div>
+      <div id="liveLogs" class="bg-black/60 border border-zinc-900 rounded-lg p-3 h-28 overflow-y-auto font-mono text-[11px] text-zinc-400"></div>
+      <div id="errorBox" class="hidden space-y-3">
+        <p id="errorText" class="text-xs text-red-400"></p>
+        <div class="flex justify-end gap-2">
+          <button id="closeProgressBtn" class="px-4 py-2 text-sm text-zinc-400 hover:text-white">Yopish</button>
+          <button id="retryBtn" class="px-4 py-2 bg-white text-black font-semibold text-sm rounded-xl hover:bg-zinc-200">Davom ettirish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. TAYYOR HUJJAT -->
+  <div id="previewContainer" class="hidden flex-1 flex flex-col items-center py-8">
+    <div class="no-print sticky top-4 z-40 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 px-5 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-3 mb-3">
+      <span class="text-xs text-emerald-400 font-mono">✓ Tayyor</span>
+      <button id="downloadDocBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded-xl">Word (.doc) yuklab olish</button>
+      <button id="printBtn" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium text-xs rounded-xl">Chop etish / PDF</button>
+      <button id="resetBtn" class="px-3 py-2 text-zinc-400 hover:text-white text-xs">Yangi mavzu</button>
+    </div>
+    <p class="no-print text-[11px] text-amber-400/80 max-w-xl text-center px-4">
+      Eslatma: AI ba’zan mavjud bo‘lmagan manba yoki noaniq raqam keltirishi mumkin. Topshirishdan oldin adabiyotlar ro‘yxati va raqamlarni tekshiring.
+    </p>
+    <div id="pagesArea" class="w-full"></div>
+  </div>
+
+  <footer class="no-print border-t border-zinc-900 py-6 text-center text-xs text-zinc-500">
+    AkademAI · OTM referat talablari asosida formatlanadi
+  </footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id) => $(id).classList.remove('hidden');
+const hide = (id) => $(id).classList.add('hidden');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const WORDS = { short: 400, standard: 600, long: 850 }; // har bir paragraf uchun so‘z
+let d = null;
+let running = false;
+
+/* ================== MATN BILAN ISHLASH ================== */
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// o' g' → o‘ g‘ ; ta'lim → ta’lim
+const fixUz = (s) => String(s ?? '')
+  .replace(/([OoGg])['`ʻ‘’ʼ]/g, '$1‘')
+  .replace(/([A-Za-z])['`ʼ’](?=[A-Za-z])/g, '$1’');
+
+// Sarlavhani tozalash: raqam, markdown, qo‘shtirnoq, oxirgi nuqta
+const tidy = (s) => fixUz(s)
+  .replace(/[*#`]/g, '')
+  .replace(/^\s*\d+(\.\d+)+\.?\s+|^\s*\d+[.)]\s+/, '')
+  .replace(/^["«]+|["»]+$/g, '')
+  .replace(/\.\s*$/, '')
+  .trim();
+
+// AI matnini xatboshilarga ajratish va markdown qoldiqlarini tozalash
+function toParagraphs(text) {
+  const lines = fixUz(text)
+    .replace(/\r/g, '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*|__|\*|`/g, '')
+    .replace(/^\s*[-•]\s+/gm, '– ')
+    .split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  // Model sarlavhani takrorlagan bo‘lsa (qisqa, tinish belgisisiz birinchi qator) — olib tashlaymiz
+  if (lines.length > 1 && lines[0].length < 120 && !/[.!?:;]$/.test(lines[0])) lines.shift();
+  return lines;
+}
+
+function parseJson(text) {
+  const s = text.replace(/```(?:json)?/gi, '');
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a < 0 || b <= a) throw new Error('AI JSON formatida javob bermadi');
+  return JSON.parse(s.slice(a, b + 1));
+}
+
+const planText = () => d.chapters.map((ch) =>
+  `${ch.num}-bob. ${ch.title}\n` + ch.sections.map((s) => `  ${s.num}. ${s.title}`).join('\n')).join('\n');
+const sectionCount = () => d.chapters.reduce((n, ch) => n + ch.sections.length, 0);
+
+function bodyDigest(limit = 14000) {
+  const all = d.chapters.flatMap((ch) => ch.sections);
+  const per = Math.floor(limit / all.length);
+  return all.map((s) => `${s.num}. ${s.title}\n${s.text.slice(0, per)}`).join('\n\n');
+}
+
+/* ================== PROMPTLAR ================== */
+const THEORY = 'Bu nazariy paragraf: asosiy tushunchalarga ilmiy ta’rif bering, turli yondashuv va qarashlarni qiyoslang, tasnif yoki rivojlanish bosqichlarini ochib bering, fikrlarni misollar bilan asoslang.';
+const PRACTICE = 'Bu amaliy-tahliliy paragraf: hozirgi holatni tahlil qiling, mavzuga mos bo‘lsa O‘zbekiston va xorij tajribasini qiyoslang, muammolarni sabablari bilan ko‘rsating, aniq va amalga oshirsa bo‘ladigan takliflar bering.';
+
+const PROMPTS = {
+  plan: (topic) => `Referat mavzusi: «${topic}»
+
+Vazifa: ushbu mavzu bo‘yicha referatning ilmiy rejasini tuzing.
+
+Talablar:
+1. Aniq 2 ta bob, har birida 2–3 ta paragraf bo‘lsin.
+2. 1-bob — nazariy asoslar: asosiy tushunchalar mazmuni, shakllanish va rivojlanish tarixi, ilmiy yondashuvlar va tasniflar.
+3. 2-bob — amaliy-tahliliy qism, mavzu sohasiga moslab:
+   • ijtimoiy, iqtisodiy, huquqiy, pedagogik va gumanitar mavzularda — hozirgi holat tahlili, O‘zbekiston va xorij tajribasi, muammolar va takomillashtirish yo‘llari;
+   • tabiiy, texnik va tibbiy mavzularda — usul va texnologiyalar, qo‘llanish sohalari, natijalar tahlili, rivojlanish istiqbollari.
+4. Nomlar mavzuga bevosita bog‘liq, aniq va ilmiy bo‘lsin (5–12 so‘z). "Umumiy tushunchalar", "Asosiy qism" kabi mavhum nomlar qo‘yilmasin.
+5. Paragraflar bir-birini takrorlamasin va birgalikda mavzuni to‘liq qamrab olsin.
+6. Tadqiqot obyekti va predmetini bittadan jumlada aniqlang.
+
+Faqat quyidagi tuzilmadagi JSON qaytaring:
+{"boblar":[{"nomi":"...","paragraflar":["...","..."]},{"nomi":"...","paragraflar":["...","..."]}],"obyekt":"...","predmet":"..."}`,
+
+  intro: () => `Referat mavzusi: «${d.topic}»
+Referat rejasi:
+${planText()}
+Tadqiqot obyekti: ${d.obyekt}
+Tadqiqot predmeti: ${d.predmet}
+
+Vazifa: referatning KIRISH qismini yozing (450–550 so‘z).
+
+Quyidagi tarkibiy qismlar shu tartibda, alohida xatboshilarda bo‘lsin:
+1. Mavzuning dolzarbligi — 2 xatboshi: muammoning fan, jamiyat va amaliyot uchun ahamiyati; mavzuga mos bo‘lsa, O‘zbekistondagi islohotlar va global tendensiyalar bilan bog‘liqligi.
+2. Mavzuning o‘rganilganlik darajasi — 1 xatboshi. Faqat shu sohada haqiqatan tanilgan olimlar va ilmiy maktablarni tilga oling; ishonchingiz komil bo‘lmasa, ism keltirmasdan ilmiy yo‘nalishlar bo‘yicha umumlashtiring.
+3. Maqsad — "Referatning maqsadi ... iborat." shaklidagi bitta xatboshi.
+4. Vazifalar — "Ushbu maqsadga erishish uchun quyidagi vazifalar belgilandi:" jumlasidan keyin rejadagi paragraflarga mos 3–5 ta vazifa; har biri yangi qatorda "– " belgisi bilan boshlanib, ";" bilan tugasin (oxirgisi nuqta bilan).
+5. Obyekt va predmet — yuqoridagi ta’riflarga tayangan bitta xatboshi.
+6. Tuzilishi — "Referat kirish, ikki bob, ${sectionCount()} ta paragraf, xulosa va foydalanilgan adabiyotlar ro‘yxatidan iborat." jumlasi.
+
+Tarkibiy qism nomlarini alohida sarlavha qilib yozmang — ular gap ichida kelsin (masalan: "Mavzuning dolzarbligi shundaki, ...").`,
+
+  section: (ch, s, words) => `Referat mavzusi: «${d.topic}»
+Referatning to‘liq rejasi (kontekst uchun):
+${planText()}
+
+Vazifa: faqat «${s.num}. ${s.title}» paragrafining matnini yozing. Bu paragraf ${ch.num}-bob («${ch.title}») tarkibiga kiradi.
+
+Talablar:
+- Hajmi: kamida ${words} so‘z (${words}–${words + 150}), ${Math.round(words / 110)}–${Math.round(words / 85)} ta xatboshi.
+- Faqat shu paragraf doirasida yozing. Rejadagi boshqa paragraflar mavzusiga kirmang — ular alohida yoziladi, takrorlanish bo‘lmasligi kerak.
+- ${ch.num === 1 ? THEORY : PRACTICE}
+- Birinchi xatboshi paragrafda ko‘rib chiqiladigan masalani aniq kiritsin, oxirgisi qisqa oraliq xulosa bilan yakunlansin.
+- Paragraf nomini yoki raqamini matn boshida takrorlamang.`,
+
+  refs: () => `Referat mavzusi: «${d.topic}»
+Reja:
+${planText()}
+
+Vazifa: "Foydalanilgan adabiyotlar ro‘yxati" uchun 8–12 ta manba tanlang.
+
+Qat’iy qoidalar:
+- Faqat haqiqatan mavjud ekaniga ishonchingiz komil manbalarni kiriting. Shubha bo‘lsa — kiritmang: kamroq, lekin haqiqiy manba afzal.
+- Hujjat raqami, qabul qilingan sana, nashriyot yoki yilni aniq bilmasangiz, o‘ylab topmang — bu qismni tushirib qoldiring.
+- Manbalar mavzuga bevosita aloqador bo‘lsin; o‘zbek, rus va ingliz tilidagi asarlar aralash bo‘lsin.
+
+Guruhlar:
+- "normativ": O‘zbekiston Respublikasi Konstitutsiyasi, kodekslar, qonunlar, Prezident farmon va qarorlari — yuridik kuchi tartibida. Mavzuga aloqasi bo‘lmasa, bo‘sh massiv qaytaring.
+- "asosiy": darsliklar, o‘quv qo‘llanmalar, monografiyalar, ilmiy maqolalar.
+- "internet": 2–3 ta rasmiy sayt (masalan, lex.uz, stat.uz yoki sohaga oid xalqaro tashkilot sayti).
+
+Bibliografik yozuv namunalari:
+Kitob: Familiya I.Sh. Asar nomi: o‘quv qo‘llanma. – Shahar: Nashriyot, yil. – betlar soni b.
+Maqola: Familiya I.Sh. Maqola nomi // Jurnal nomi. – yil. – №… – B. …–….
+Qonun: O‘zbekiston Respublikasining «…» to‘g‘risidagi Qonuni.
+Sayt: www.lex.uz – O‘zbekiston Respublikasi Qonunchilik ma’lumotlari milliy bazasi.
+
+Tartib raqamlarini qo‘ymang. Faqat JSON qaytaring:
+{"normativ":["..."],"asosiy":["..."],"internet":["..."]}`,
+
+  conclusion: () => `Referat mavzusi: «${d.topic}»
+Reja:
+${planText()}
+
+Referat asosiy qismining matni (qisqartirilgan):
+"""
+${bodyDigest()}
+"""
+
+Vazifa: referatning XULOSA qismini yozing (350–450 so‘z, 5–6 xatboshi).
+- Birinchi xatboshi: o‘tkazilgan tahlilning umumiy natijasi.
+- Keyingi xatboshilar: asosiy ilmiy xulosalar — "Birinchidan, ...", "Ikkinchidan, ...", "Uchinchidan, ..." shaklida, har biri alohida xatboshida. Ular yuqoridagi matnga tayansin, yangi fakt yoki raqam kiritilmasin.
+- Oxirgi xatboshi: aniq amaliy takliflar va mavzuni kelgusida tadqiq etish istiqbollari.`,
+};
+
+/* ================== AI CHAQIRUVI (3 martagacha urinish) ================== */
+async function ai(prompt, { json = false, maxTokens = 4000, minLength = 0 } = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, json, maxTokens }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        const status = data.status || res.status; // Netlify'da xato kodi JSON ichida keladi
+        const err = new Error(data.error || `Server xatosi (${status})`);
+        err.fatal = [400, 401, 402, 403].includes(status); // kalit/balans xatosi — qayta urinish foydasiz
+        err.status = status;
+        throw err;
+      }
+      let text = data.text;
+      if (json) return parseJson(text);
+      if (data.finish === 'length') text = text.slice(0, text.lastIndexOf('.') + 1); // chala gapni kesish
+      if (text.length < minLength) throw new Error('Javob kutilganidan qisqa');
+      return text;
+    } catch (e) {
+      lastErr = e;
+      if (e.fatal || attempt === 3) break;
+      addLog(`⚠ ${e.message} — qayta urinish (${attempt}/2)...`);
+      await sleep((e.status === 429 ? 8000 : 2000) * attempt); // model band bo‘lsa — uzoqroq kutamiz
+    }
+  }
+  throw lastErr;
+}
+
+// Bir vaqtda `limit` tadan vazifa bajaradi; xato bo‘lsa ham qolganlari tugashini kutadi
+async function runPool(tasks, limit = 4) {
+  const errors = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < tasks.length) {
+      const t = tasks[next++];
+      try { await t(); } catch (e) { errors.push(e); }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  if (errors.length) throw errors[0];
+}
+
+/* ================== JARAYON UI ================== */
+function addLog(msg) {
+  const el = document.createElement('div');
+  el.textContent = `> ${msg}`;
+  $('liveLogs').appendChild(el);
+  $('liveLogs').scrollTop = $('liveLogs').scrollHeight;
+}
+
+function stepItems() {
+  const items = [{ id: 'plan', label: 'Mavzu tahlili va reja' }];
+  if (d.chapters) {
+    items.push({ id: 'intro', label: 'Kirish' });
+    d.chapters.forEach((ch) => ch.sections.forEach((s) => items.push({ id: s.id, label: `${s.num}. ${s.title}` })));
+    items.push({ id: 'refs', label: 'Adabiyotlar ro‘yxati' }, { id: 'conclusion', label: 'Xulosa' });
+  }
+  return items;
+}
+
+function renderSteps() {
+  $('stepList').innerHTML = stepItems().map((it) =>
+    `<div id="step-${it.id}" class="flex gap-2 text-zinc-500"><span class="step-icon w-3 shrink-0">○</span><span class="truncate">${esc(it.label)}</span></div>`
+  ).join('');
+  const done = { plan: !!d.chapters, intro: !!d.intro, refs: !!d.refs, conclusion: !!d.conclusion };
+  d.chapters?.forEach((ch) => ch.sections.forEach((s) => (done[s.id] = !!s.text)));
+  Object.entries(done).forEach(([id, ok]) => ok && setStep(id, 'done'));
+}
+
+function setStep(id, status) {
+  const el = $(`step-${id}`);
+  if (!el) return;
+  const map = { loading: ['text-white font-semibold', '⟳'], done: ['text-emerald-400', '✓'], error: ['text-red-400', '✗'] };
+  const [cls, icon] = map[status];
+  el.className = `flex gap-2 ${cls}`;
+  el.querySelector('.step-icon').textContent = icon;
+}
+
+const job = (id, label, fn) => async () => {
+  setStep(id, 'loading');
+  try {
+    await fn();
+    setStep(id, 'done');
+    addLog(`✓ ${label}`);
+  } catch (e) {
+    setStep(id, 'error');
+    addLog(`✗ ${label}: ${e.message}`);
+    throw e;
+  }
+};
+
+/* ================== ASOSIY GENERATSIYA ================== */
+async function generate() {
+  if (running) return;
+  running = true;
+  hide('errorBox');
+  $('errorText').textContent = '';
+  show('progressModal');
+
+  try {
+    // 1) REJA
+    if (!d.chapters) {
+      renderSteps();
+      await job('plan', 'Reja tuzildi', async () => {
+        const plan = await ai(PROMPTS.plan(d.topic), { json: true, maxTokens: 3000 });
+        const ok = Array.isArray(plan.boblar) && plan.boblar.length >= 2 &&
+          plan.boblar.every((b) => b.nomi && Array.isArray(b.paragraflar) && b.paragraflar.length);
+        if (!ok) throw new Error('Reja noto‘g‘ri formatda keldi');
+        d.obyekt = tidy(plan.obyekt);
+        d.predmet = tidy(plan.predmet);
+        d.chapters = plan.boblar.slice(0, 2).map((b, i) => ({
+          num: i + 1,
+          title: tidy(b.nomi),
+          sections: b.paragraflar.slice(0, 3).map((t, j) => ({
+            id: `s${i + 1}${j + 1}`, num: `${i + 1}.${j + 1}`, title: tidy(t), text: '',
+          })),
+        }));
+      })();
+    }
+    renderSteps();
+
+    // 2) KIRISH + PARAGRAFLAR + ADABIYOTLAR (parallel; faqat tayyor bo‘lmaganlari)
+    const words = WORDS[d.length] || 600;
+    const jobs = [];
+    if (!d.intro) jobs.push(job('intro', 'Kirish', async () => {
+      d.intro = await ai(PROMPTS.intro(), { maxTokens: 4000, minLength: 1500 });
+    }));
+    d.chapters.forEach((ch) => ch.sections.forEach((s) => {
+      if (!s.text) jobs.push(job(s.id, `${s.num}-paragraf`, async () => {
+        s.text = await ai(PROMPTS.section(ch, s, words), { maxTokens: 6000, minLength: words * 4 });
+      }));
+    }));
+    if (!d.refs) jobs.push(job('refs', 'Adabiyotlar ro‘yxati', async () => {
+      d.refs = await ai(PROMPTS.refs(), { json: true, maxTokens: 3000 });
+    }));
+    await runPool(jobs, 4);
+
+    // 3) XULOSA — yozilgan matnga tayanib
+    if (!d.conclusion) await job('conclusion', 'Xulosa', async () => {
+      d.conclusion = await ai(PROMPTS.conclusion(), { maxTokens: 4000, minLength: 1200 });
+    })();
+
+    addLog('Referat to‘liq tayyor!');
+    await sleep(400);
+    renderPreview();
+  } catch (e) {
+    console.error(e);
+    $('errorText').textContent = `Xatolik: ${e.message}. "Davom ettirish" faqat tayyor bo‘lmagan qismlarni qayta yozadi.`;
+    show('errorBox');
+  } finally {
+    running = false;
+  }
+}
+
+/* ================== ADABIYOTLAR VA MUNDARIJA ================== */
+function refList() {
+  const clean = (arr) => (Array.isArray(arr) ? arr : [])
+    .map((x) => fixUz(x).replace(/^\s*\d+[.)]\s*/, '').replace(/[*`]/g, '').trim())
+    .filter(Boolean);
+  const r = d.refs || {};
+  return [
+    ...clean(r.normativ),                                        // yuridik kuchi tartibida
+    ...clean(r.asosiy).sort(new Intl.Collator('uz').compare),    // alifbo tartibida
+    ...clean(r.internet),
+  ];
+}
+
+const tocLines = () => [
+  ['KIRISH', 1],
+  ...d.chapters.flatMap((ch) => [[`${ch.num}-BOB. ${ch.title.toUpperCase()}`, 1], ...ch.sections.map((s) => [`${s.num}. ${s.title}`, 2])]),
+  ['XULOSA', 1],
+  ['FOYDALANILGAN ADABIYOTLAR RO‘YXATI', 1],
+];
+
+/* ================== EKRANDAGI PREVIEW ================== */
+function renderPreview() {
+  const paras = (t) => toParagraphs(t).map((p) => `<p class="t">${esc(p)}</p>`).join('');
+  const page = (inner, cls = '') => `<div class="a4-page ${cls}">${inner}</div>`;
+
+  const pages = [
+    page(`
+      <div style="font-weight:700">
+        <p style="font-size:12pt;line-height:1.3">${esc(d.ministry.toUpperCase())}</p>
+        <p style="font-size:13pt;margin-top:12pt">${esc(d.university.toUpperCase())}</p>
+        <p style="font-size:12pt;font-weight:400;font-style:italic">${esc(d.department)}</p>
+      </div>
+      <div>
+        <p style="font-size:22pt;font-weight:700;letter-spacing:4pt">REFERAT</p>
+        <p style="margin-top:8pt">Mavzu: <b>«${esc(d.topic)}»</b></p>
+      </div>
+      <div style="align-self:flex-end;text-align:left;font-size:13pt">
+        <p><b>Bajardi:</b> ${esc(d.studentName)}</p>
+        <p><b>Qabul qildi:</b> ${esc(d.supervisorName)}</p>
+      </div>
+      <p style="font-weight:700;font-size:13pt">${esc(d.city)} – ${esc(d.year)}</p>`, 'title-page'),
+
+    page(`<h1>Mundarija</h1>` + tocLines().map(([t, lvl]) => `<p class="${lvl === 2 ? 'toc2' : ''}">${esc(t)}</p>`).join('')),
+    page(`<h1>Kirish</h1>${paras(d.intro)}`),
+    ...d.chapters.map((ch) => page(`<h1>${ch.num}-bob. ${esc(ch.title)}</h1>` +
+      ch.sections.map((s) => `<h2>${s.num}. ${esc(s.title)}</h2>${paras(s.text)}`).join(''))),
+    page(`<h1>Xulosa</h1>${paras(d.conclusion)}`),
+    page(`<h1>Foydalanilgan adabiyotlar ro‘yxati</h1>` +
+      refList().map((r, i) => `<p class="ref">${i + 1}. ${esc(r)}</p>`).join('')),
+  ];
+
+  $('pagesArea').innerHTML = pages.join('');
+  hide('progressModal'); hide('heroSection'); show('previewContainer');
+  window.scrollTo({ top: 0 });
+}
+
+/* ================== WORD (.DOC) — toza, Word tushunadigan HTML ================== */
+function buildWordDoc() {
+  const F = "font-family:'Times New Roman',serif;color:black;";
+  const PB = 'page-break-before:always;';
+  const p = (html, style) => `<p class=MsoNormal style="${F}margin:0;${style}">${html}</p>`;
+  const para = (t) => p(esc(t), 'font-size:14pt;line-height:150%;text-align:justify;text-indent:1.25cm');
+  const paras = (t) => toParagraphs(t).map(para).join('');
+  const h1 = (t) => `<h1 style="${F}${PB}font-size:14pt;font-weight:bold;text-align:center;line-height:150%;margin:0 0 12pt 0;page-break-after:avoid">${esc(t.toUpperCase())}</h1>`;
+  const h2 = (t) => `<h2 style="${F}font-size:14pt;font-weight:bold;text-align:center;line-height:150%;margin:12pt 0 6pt 0;page-break-after:avoid">${esc(t)}</h2>`;
+  const c = (html, style = '') => p(html, `text-align:center;text-indent:0;line-height:115%;${style}`);
+
+  // Titul (sahifa raqamisiz)
+  const title =
+    c(`<b>${esc(d.ministry.toUpperCase())}</b>`, 'font-size:12pt') +
+    c(`<b>${esc(d.university.toUpperCase())}</b>`, 'font-size:13pt;margin-top:12pt') +
+    c(`<i>${esc(d.department)}</i>`, 'font-size:12pt;margin-top:4pt') +
+    c('<b>REFERAT</b>', 'font-size:22pt;letter-spacing:4pt;margin-top:150pt') +
+    c(`Mavzu: <b>«${esc(d.topic)}»</b>`, 'font-size:14pt;margin-top:10pt') +
+    p(`<b>Bajardi:</b> ${esc(d.studentName)}`, 'font-size:13pt;line-height:150%;margin-left:8cm;margin-top:110pt') +
+    p(`<b>Qabul qildi:</b> ${esc(d.supervisorName)}`, 'font-size:13pt;line-height:150%;margin-left:8cm') +
+    c(`<b>${esc(d.city)} – ${esc(d.year)}</b>`, 'font-size:13pt;margin-top:130pt');
+
+  // Mundarija — Word TOC maydoni (Ctrl+A → F9 bosilganda haqiqiy sahifa raqamlari chiqadi)
+  const lines = tocLines();
+  const FB = `<!--[if supportFields]><span style='mso-element:field-begin'></span> TOC \\o "1-2" \\h \\z \\u <span style='mso-element:field-separator'></span><![endif]-->`;
+  const FE = `<!--[if supportFields]><span style='mso-element:field-end'></span><![endif]-->`;
+  const toc =
+    c('<b>MUNDARIJA</b>', `${PB}font-size:14pt;line-height:150%;margin-bottom:12pt`) +
+    lines.map(([t, lvl], i) =>
+      p(`${i === 0 ? FB : ''}${esc(t)}${i === lines.length - 1 ? FE : ''}`,
+        `font-size:14pt;line-height:150%;margin-left:${lvl === 2 ? '1cm' : '0'}`)).join('');
+
+  const body =
+    title + toc +
+    h1('Kirish') + paras(d.intro) +
+    d.chapters.map((ch) => h1(`${ch.num}-bob. ${ch.title}`) +
+      ch.sections.map((s) => h2(`${s.num}. ${s.title}`) + paras(s.text)).join('')).join('') +
+    h1('Xulosa') + paras(d.conclusion) +
+    h1('Foydalanilgan adabiyotlar ro‘yxati') +
+    refList().map((r, i) => p(`${i + 1}. ${esc(r)}`,
+      'font-size:14pt;line-height:150%;text-align:justify;margin-left:0.75cm;text-indent:-0.75cm')).join('');
+
+  // Sahifa raqami — haqiqiy Word footer maydoni (titulda ko‘rinmaydi)
+  const footer = `
+<table id=hdrftr><tr><td>
+<div style='mso-element:footer' id=f1>
+<p class=MsoFooter align=center style="text-align:center;${F}font-size:12pt"><!--[if supportFields]><span style='mso-element:field-begin'></span>PAGE<span style='mso-element:field-separator'></span><![endif]--><span style='mso-no-proof:yes'>1</span><!--[if supportFields]><span style='mso-element:field-end'></span><![endif]--></p>
+</div>
+</td></tr></table>`;
+
+  return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset='utf-8'><title>${esc(d.topic)}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+@page WordSection1 { size:595.3pt 841.9pt; margin:2cm 1.5cm 2cm 3cm; mso-header-margin:1cm; mso-footer-margin:1cm; mso-title-page:yes; mso-footer:f1; mso-paper-source:0; }
+div.WordSection1 { page:WordSection1; }
+table#hdrftr { margin:0 0 0 50in; }
+</style></head>
+<body lang=UZ><div class=WordSection1>${body}${footer}</div></body></html>`;
+}
+
+function downloadWord() {
+  const blob = new Blob(['\ufeff', buildWordDoc()], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${d.topic.replace(/[\\/:*?"<>|]+/g, '').slice(0, 40).trim() || 'referat'}_referat.doc`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ================== HODISALAR ================== */
+$('topicForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if ($('topicInput').value.trim()) show('infoModal');
+});
+$('cancelModalBtn').onclick = () => hide('infoModal');
+$('startGenBtn').onclick = () => {
+  const v = (id) => fixUz($(id).value.trim());
+  d = {
+    topic: v('topicInput'), ministry: v('ministry'), university: v('university'),
+    department: v('department'), studentName: v('studentName'), supervisorName: v('supervisorName'),
+    city: v('city'), year: v('year'), length: $('length').value,
+  };
+  hide('infoModal');
+  $('liveLogs').innerHTML = '';
+  addLog('Generatsiya boshlandi...');
+  generate();
+};
+$('retryBtn').onclick = () => generate();
+$('closeProgressBtn').onclick = () => hide('progressModal');
+$('downloadDocBtn').onclick = downloadWord;
+$('printBtn').onclick = () => window.print();
+$('resetBtn').onclick = () => {
+  d = null;
+  $('topicInput').value = '';
+  hide('previewContainer');
+  show('heroSection');
+};
+</script>
+</body>
+</html>

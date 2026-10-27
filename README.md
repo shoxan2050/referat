@@ -30,4 +30,3 @@ server.js                           lokal Express server
 netlify/edge-functions/generate.js  Netlify'dagi /api/generate
 netlify.toml                        Netlify sozlamalari
 ```
-# referat

@@ -112,7 +112,9 @@
       <div class="flex items-center gap-2 border-b border-zinc-800 pb-4">
         <div class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></div>
         <span class="text-sm font-medium text-white">Referat yozilmoqda</span>
+        <span id="elapsed" class="ml-auto font-mono text-xs text-zinc-500"></span>
       </div>
+      <p class="text-[11px] text-zinc-500 -mt-2">Odatda 3–7 daqiqa davom etadi. Sahifani yopmang.</p>
       <div id="stepList" class="space-y-2 font-mono text-xs max-h-64 overflow-y-auto"></div>
       <div id="liveLogs" class="bg-black/60 border border-zinc-900 rounded-lg p-3 h-28 overflow-y-auto font-mono text-[11px] text-zinc-400"></div>
       <div id="errorBox" class="hidden space-y-3">
@@ -182,12 +184,44 @@ function toParagraphs(text) {
   return lines;
 }
 
-function parseJson(text) {
-  const s = text.replace(/```(?:json)?/gi, '');
+// AI javobidan JSON obyektni topib olish. ```json bloklari, oldi-ortidagi gaplar,
+// “qiyshiq” qo‘shtirnoqlar va oxirgi ortiqcha vergullarga chidamli.
+// check — kerakli tuzilmani tekshiradi; mos kelmasa keyingi nomzod sinab ko‘riladi.
+function parseJson(text, check = () => true) {
+  const s = String(text ?? '').replace(/```(?:json)?/gi, '');
+  const candidates = [];
+  for (let i = s.indexOf('{'); i >= 0; i = s.indexOf('{', i + 1)) {
+    let depth = 0, inStr = false, escNext = false;
+    for (let j = i; j < s.length; j++) {
+      const c = s[j];
+      if (inStr) {
+        if (escNext) escNext = false;
+        else if (c === '\\') escNext = true;
+        else if (c === '"') inStr = false;
+      } else if (c === '"') inStr = true;
+      else if (c === '{') depth++;
+      else if (c === '}' && --depth === 0) { candidates.push(s.slice(i, j + 1)); break; }
+    }
+  }
   const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a < 0 || b <= a) throw new Error('AI JSON formatida javob bermadi');
-  return JSON.parse(s.slice(a, b + 1));
+  if (a >= 0 && b > a) candidates.push(s.slice(a, b + 1));
+  const fixes = [(x) => x, (x) => x.replace(/[“”„]/g, '"').replace(/,\s*([}\]])/g, '$1')];
+  for (const c of candidates.sort((x, y) => y.length - x.length)) {
+    for (const fix of fixes) {
+      try {
+        const o = JSON.parse(fix(c));
+        if (o && typeof o === 'object' && check(o)) return o;
+      } catch {}
+    }
+  }
+  console.warn('AI javobidan JSON topilmadi:', s.slice(0, 1000));
+  throw new Error('AI javobi kutilgan formatda emas');
 }
+
+const isPlan = (p) => Array.isArray(p.boblar) && p.boblar.length >= 2 &&
+  p.boblar.every((b) => b && b.nomi && Array.isArray(b.paragraflar) && b.paragraflar.length);
+const isRefs = (r) => ['normativ', 'asosiy', 'internet'].some((k) => Array.isArray(r[k])) &&
+  (r.asosiy?.length || 0) + (r.normativ?.length || 0) > 0;
 
 const planText = () => d.chapters.map((ch) =>
   `${ch.num}-bob. ${ch.title}\n` + ch.sections.map((s) => `  ${s.num}. ${s.title}`).join('\n')).join('\n');
@@ -293,7 +327,7 @@ Vazifa: referatning XULOSA qismini yozing (350–450 so‘z, 5–6 xatboshi).
 };
 
 /* ================== AI CHAQIRUVI (3 martagacha urinish) ================== */
-async function ai(prompt, { json = false, maxTokens = 4000, minLength = 0 } = {}) {
+async function ai(prompt, { json = false, check, maxTokens = 4000, minLength = 0 } = {}) {
   let lastErr;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -311,7 +345,7 @@ async function ai(prompt, { json = false, maxTokens = 4000, minLength = 0 } = {}
         throw err;
       }
       let text = data.text;
-      if (json) return parseJson(text);
+      if (json) return parseJson(text, check);
       if (data.finish === 'length') text = text.slice(0, text.lastIndexOf('.') + 1); // chala gapni kesish
       if (text.length < minLength) throw new Error('Javob kutilganidan qisqa');
       return text;
@@ -395,16 +429,20 @@ async function generate() {
   hide('errorBox');
   $('errorText').textContent = '';
   show('progressModal');
+  const t0 = Date.now();
+  const tick = () => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    $('elapsed').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
 
   try {
     // 1) REJA
     if (!d.chapters) {
       renderSteps();
       await job('plan', 'Reja tuzildi', async () => {
-        const plan = await ai(PROMPTS.plan(d.topic), { json: true, maxTokens: 3000 });
-        const ok = Array.isArray(plan.boblar) && plan.boblar.length >= 2 &&
-          plan.boblar.every((b) => b.nomi && Array.isArray(b.paragraflar) && b.paragraflar.length);
-        if (!ok) throw new Error('Reja noto‘g‘ri formatda keldi');
+        const plan = await ai(PROMPTS.plan(d.topic), { json: true, check: isPlan, maxTokens: 3000 });
         d.obyekt = tidy(plan.obyekt);
         d.predmet = tidy(plan.predmet);
         d.chapters = plan.boblar.slice(0, 2).map((b, i) => ({
@@ -430,7 +468,7 @@ async function generate() {
       }));
     }));
     if (!d.refs) jobs.push(job('refs', 'Adabiyotlar ro‘yxati', async () => {
-      d.refs = await ai(PROMPTS.refs(), { json: true, maxTokens: 3000 });
+      d.refs = await ai(PROMPTS.refs(), { json: true, check: isRefs, maxTokens: 3000 });
     }));
     await runPool(jobs, 4);
 
@@ -447,6 +485,7 @@ async function generate() {
     $('errorText').textContent = `Xatolik: ${e.message}. "Davom ettirish" faqat tayyor bo‘lmagan qismlarni qayta yozadi.`;
     show('errorBox');
   } finally {
+    clearInterval(timer);
     running = false;
   }
 }
